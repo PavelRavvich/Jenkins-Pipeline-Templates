@@ -42,7 +42,7 @@ pipeline {
                     env.IMAGE_TAG = "${BRANCH_NAME}-${buildNumber}"
                 }
                 sh './gradlew build'
-                sh "docker build -t ${AWS_ECR_REPO}:${IMAGE_TAG} ."
+                sh "docker build -t ${AWS_ECR_REPO}:${IMAGE_TAG} -f Dockerfile ."
             }
         }
         
