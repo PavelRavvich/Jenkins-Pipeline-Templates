@@ -5,7 +5,7 @@ pipeline {
         AWS_ECR_REPO = 'your-ecr-repo'
         BRANCH_NAME = "${env.GIT_BRANCH}"
         DOCKER_HISTORY_LENGTH = 3
-        BUILD_STATUS = ''
+        BUILD_STATUS = 'BUILD FAIL'
     }
     stages {
         stage('Git Pull') {
@@ -61,7 +61,7 @@ pipeline {
                     aws ecr batch-delete-image --repository-name ${AWS_ECR_REPO} \
                     --image-ids imageTag={}"
                 sh './gradlew clean'
-                env.BUILD_STATUS = 'SUCCESS'
+                env.BUILD_STATUS = 'BUILD SUCCESS'
             }
         }
     }
