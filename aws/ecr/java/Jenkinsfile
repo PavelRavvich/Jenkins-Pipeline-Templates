@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+    environment {
+        AWS_DEFAULT_REGION = 'your-aws-region'
+        AWS_ECR_REPO = 'your-ecr-repo'
+        BRANCH_NAME = "${env.GIT_BRANCH}"
+        DOCKER_HISTORY_LENGTH = 3
+        BUILD_STATUS = ''
+    }
+    stages {
+        stage('Git Pull') {
+            steps {
+                script {
+                    if (fileExists('.git')) {
+                        sh "git pull origin ${BRANCH_NAME}"
+                    } else {
+                        sh "git clone git@github.com:your-repo-url.git ."
+                        sh "git checkout ${BRANCH_NAME}"
+                    }
+                }
+            }
+        }
+        stage('Run Tests') {
+            steps {
+                sh './gradlew clean test'
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def latestTag = sh "aws ecr describe-images \
+                        --repository-name ${AWS_ECR_REPO} \
+                        --query 'sort_by(imageDetails,& imagePushedAt)[*].imageTags' \
+                        --output text | tail -1".trim()
+                    def buildNumber = latestTag =~ /-(\d+)$/ ? Integer.parseInt(RegExp.$1) + 1 : 0
+                    env.IMAGE_TAG = "${BRANCH_NAME}-${buildNumber}"
+                }
+                sh './gradlew build'
+                sh "docker build -t ${AWS_ECR_REPO}:${IMAGE_TAG} ."
+            }
+        }
+        stage('Push to ECR') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh "aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | \
+                        docker login --username AWS \
+                        --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                    sh "docker push ${AWS_ECR_REPO}:${IMAGE_TAG}"
+                }
+            }
+        }
+        stage('Clean Up') {
+            steps {
+                sh "aws ecr list-images --repository-name ${AWS_ECR_REPO} \
+                    --query 'imageIds[?type(imageTag)==`string`].imageTag' \
+                    --output text | sort -r | awk 'NR>${DOCKER_HISTORY_LENGTH}' | xargs -I {} \
+                    aws ecr batch-delete-image --repository-name ${AWS_ECR_REPO} \
+                    --image-ids imageTag={}"
+                sh './gradlew clean'
+                env.BUILD_STATUS = 'SUCCESS'
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                def payload = "{\"status\": \"${env.BUILD_STATUS}\", \
+                    \"pipeline\": \"${env.JOB_NAME}\", \"build\": \"${env.BUILD_NUMBER}\", \
+                    \"branch\": \"${BRANCH_NAME}\", \"image_tag\": \"${IMAGE_TAG}\"}"
+                sh "curl -X POST -H 'Content-type: application/json' \
+                    -d '${payload}' http://your-http-request-url"
+            }
+        }
+    }
+}
