@@ -1,5 +1,4 @@
 pipeline {
-pipeline {
     agent any
     environment {
         AWS_REGION = 'your-aws-region'
