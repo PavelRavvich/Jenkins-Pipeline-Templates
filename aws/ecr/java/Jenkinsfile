@@ -72,7 +72,7 @@ pipeline {
                     \"pipeline\": \"${env.JOB_NAME}\", \"build\": \"${env.BUILD_NUMBER}\", \
                     \"branch\": \"${BRANCH_NAME}\", \"image_tag\": \"${IMAGE_TAG}\"}"
                 sh "curl -X POST -H 'Content-type: application/json' \
-                    -d '${payload}' http://your-http-request-url"
+                    -d '${payload}' http://messager-notification-webhook"
             }
         }
     }
